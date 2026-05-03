@@ -49,6 +49,12 @@ training/*.csv
 # Docker
 *.tar
 
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
 # Test / coverage
 .pytest_cache/
 .coverage
