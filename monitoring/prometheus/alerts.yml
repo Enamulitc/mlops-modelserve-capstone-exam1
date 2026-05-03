@@ -1,0 +1,37 @@
+groups:
+  - name: modelserve_alerts
+    rules:
+
+      # ── Alert 1: Service Down ──────────────────────────────────────────────
+      - alert: FastAPIDown
+        expr: up{job="fastapi"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI inference service is down"
+          description: "The /metrics endpoint for job 'fastapi' has been unreachable for more than 1 minute."
+
+      # ── Alert 2: High Prediction Latency (p95 > 500ms) ────────────────────
+      - alert: HighPredictionLatency
+        expr: histogram_quantile(0.95, rate(prediction_duration_seconds_bucket[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prediction p95 latency exceeded 500ms"
+          description: "The 95th-percentile prediction latency is {{ $value | humanizeDuration }} (threshold: 500ms)."
+
+      # ── Alert 3: High Error Rate (> 5% of requests failing) ───────────────
+      - alert: HighPredictionErrorRate
+        expr: |
+          rate(prediction_requests_total{status="error"}[5m])
+          /
+          (rate(prediction_requests_total[5m]) + 0.001)
+          > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prediction error rate exceeded 5%"
+          description: "More than 5% of prediction requests are failing. Current rate: {{ $value | humanizePercentage }}."

@@ -1,0 +1,20 @@
+{
+  "cc_num": 2703186189652095,
+  "features": {
+    "amt": 4.97,
+    "city_pop": 3495,
+    "lat": 36.0788,
+    "long": -81.1781,
+    "merch_lat": 36.011293,
+    "merch_long": -82.048315,
+    "hour": 0,
+    "day_of_week": 4,
+    "month": 1,
+    "age": 51,
+    "category_encoded": 6,
+    "gender_encoded": 0,
+    "state_encoded": 15,
+    "job_encoded": 123,
+    "trans_count": 0
+  }
+}

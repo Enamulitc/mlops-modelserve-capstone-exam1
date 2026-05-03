@@ -1,0 +1,12 @@
+project: proddetection
+registry: data/registry.db
+provider: local
+
+online_store:
+  type: redis
+  connection_string: "${REDIS_HOST}:${REDIS_PORT}"   # set in .env
+
+offline_store:
+  type: file
+
+entity_key_serialization_version: 2
