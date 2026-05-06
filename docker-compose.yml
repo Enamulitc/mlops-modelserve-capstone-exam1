@@ -40,7 +40,9 @@ services:
 
   # ── MLflow tracking server ─────────────────────────────────────────────────
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.11.3
+    build:
+      context: ./docker/mlflow
+      dockerfile: Dockerfile
     container_name: mlflow
     restart: unless-stopped
     depends_on:
@@ -48,22 +50,24 @@ services:
         condition: service_healthy
     environment:
       MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow}@postgres:5432/${POSTGRES_DB:-mlflow}
-      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
-    volumes:
-      - mlflow_artifacts:/mlflow/artifacts
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_S3_BUCKET:-s3://modelserve-artifacts-8e460886/mlflow-artifacts}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-southeast-1}
+    volumes: []
     ports:
       - "5000:5000"
     command: >
       mlflow server
         --backend-store-uri postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow}@postgres:5432/${POSTGRES_DB:-mlflow}
-        --default-artifact-root /mlflow/artifacts
+        --artifacts-destination ${MLFLOW_S3_BUCKET:-s3://modelserve-artifacts-8e460886/mlflow-artifacts}
+        --serve-artifacts
+        --default-artifact-root mlflow-artifacts:/
         --host 0.0.0.0
         --port 5000
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 15s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
 
   # ── Redis — Feast online store ────────────────────────────────────────────
   redis:
@@ -80,6 +84,7 @@ services:
 
   # ── FastAPI inference service ─────────────────────────────────────────────
   api:
+    image: ${API_IMAGE:-mlops-modelserve-capstone-exam1-api:latest}
     build:
       context: .
       dockerfile: Dockerfile

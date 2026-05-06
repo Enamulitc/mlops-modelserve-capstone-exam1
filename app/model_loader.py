@@ -9,9 +9,13 @@ loaded once per process.
 import os
 import logging
 
-import mlflow
-import mlflow.sklearn
-from mlflow.tracking import MlflowClient
+try:
+    import mlflow
+    import mlflow.sklearn
+    from mlflow.tracking import MlflowClient
+except Exception:  # pragma: no cover - import-time fallback for test environments
+    mlflow = None
+    MlflowClient = None
 
 logger = logging.getLogger(__name__)
 

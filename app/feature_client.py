@@ -1,5 +1,4 @@
-"""
-feature_client.py — Feast online feature lookup wrapper
+"""feature_client.py — Feast online feature lookup wrapper
 --------------------------------------------------------
 Entity key: cc_num (credit card number)
 """
@@ -8,7 +7,8 @@ import os
 import logging
 from typing import Dict, Any, Tuple
 
-from feast import FeatureStore
+# Import Feast lazily inside get_store() to avoid heavy runtime dependency at module import time
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +25,19 @@ FEATURE_NAMES = [
     "job_encoded", "trans_count",
 ]
 
-_store: FeatureStore = None
+# Module-level store instance (initialized lazily)
+_store = None
 
 
-def get_store() -> FeatureStore:
+def get_store():
     global _store
     if _store is None:
         logger.info(f"Initialising Feast FeatureStore at {FEAST_REPO_PATH}")
+        try:
+            from feast import FeatureStore
+        except Exception as e:
+            # Raise a clear error if Feast isn't available at runtime
+            raise RuntimeError("Feast is not installed. Install feast[redis] or run feature materialization in a container.") from e
         _store = FeatureStore(repo_path=FEAST_REPO_PATH)
     return _store
 

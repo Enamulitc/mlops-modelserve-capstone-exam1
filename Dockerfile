@@ -7,7 +7,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: Builder ─────────────────────────────────────────────────────────
-FROM python:3.10-slim AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
@@ -27,7 +27,7 @@ RUN pip install --upgrade pip && \
 
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
-FROM python:3.10-slim AS runtime
+FROM python:3.11-slim AS runtime
 
 # Create non-root user (exam requirement)
 RUN groupadd --gid 1001 appgroup && \
