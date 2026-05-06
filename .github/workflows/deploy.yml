@@ -41,6 +41,7 @@ jobs:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
     needs: test
+    environment: AWS_ACCESS_KEY_ID
     outputs:
       image_uri: ${{ steps.build.outputs.image_uri }}
 
@@ -86,6 +87,7 @@ jobs:
     name: Deploy to EC2
     runs-on: ubuntu-latest
     needs: build-and-push
+    environment: AWS_ACCESS_KEY_ID
 
     steps:
       - name: Deploy via SSH
@@ -96,19 +98,20 @@ jobs:
           key:      ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -e
+            export PATH="/snap/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
             cd ~/mlops-modelserve-capstone-exam1
 
             git pull origin main
 
-            # Login to ECR using EC2 instance role (no keys needed on server)
+            # Login to ECR using EC2 instance role (no static keys needed)
             aws ecr get-login-password --region ap-southeast-1 | \
               docker login --username AWS --password-stdin \
               242799976997.dkr.ecr.ap-southeast-1.amazonaws.com
 
-            # Pull and restart api only
-            export API_IMAGE=${{ needs.build-and-push.outputs.image_uri }}
-            docker pull $API_IMAGE
-            API_IMAGE=$API_IMAGE docker compose up -d --no-deps api
+            # Pull new image and restart api container only
+            API_IMAGE="${{ needs.build-and-push.outputs.image_uri }}"
+            docker pull "$API_IMAGE"
+            API_IMAGE="$API_IMAGE" docker compose up -d --no-deps api
 
       - name: Verify health endpoint
         run: |
