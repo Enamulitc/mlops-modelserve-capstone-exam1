@@ -20,5 +20,11 @@ resource "aws_instance" "this" {
   associate_public_ip_address = true
   key_name                    = aws_key_pair.this.key_name
   iam_instance_profile        = var.iam_instance_profile
+  # Root EBS volume: 100 GiB gp3 to meet storage requirement
+  root_block_device {
+    volume_size = 100
+    volume_type = "gp3"
+  }
+
   tags                        = var.tags
 }

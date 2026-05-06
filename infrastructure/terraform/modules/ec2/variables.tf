@@ -2,7 +2,8 @@ variable "subnet_id" { type = string }
 variable "sg_id"     { type = string }
 variable "instance_type" {
   type    = string
-  default = "t3.small"
+  # Use a default with at least 4 vCPU and >= 8 GiB RAM. t3.xlarge has 4 vCPU and 16 GiB RAM.
+  default = "t3.xlarge"
 }
 variable "tags" { type = map(string) }
 
