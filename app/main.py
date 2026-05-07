@@ -101,9 +101,9 @@ def health():
 def predict(request: PredictRequest):
     start = time.time()
     try:
-    # 1) Lookup features from Feast (online store)
-    t0 = time.time()
-    feast_features, cache_hit = get_online_features(request.cc_num)
+        # 1) Lookup features from Feast (online store)
+        t0 = time.time()
+        feast_features, cache_hit = get_online_features(request.cc_num)
         try:
             feast_lookup_duration_seconds.observe(time.time() - t0)
         except Exception:
@@ -122,9 +122,9 @@ def predict(request: PredictRequest):
             if request.features:
                 feast_features = fallback_features(request.features)
 
-    # 2) Build feature vector and run the cached model
-    X = _build_feature_vector(feast_features, request.features)
-    model = get_model()
+        # 2) Build feature vector and run the cached model
+        X = _build_feature_vector(feast_features, request.features)
+        model = get_model()
         pred = int(model.predict(X)[0])
         prob = float(model.predict_proba(X)[0][1])
 
@@ -177,9 +177,9 @@ def predict_explain(cc_num: int, explain: bool = Query(default=False)):
             except Exception:
                 pass
 
-    # Build feature vector (no request body in this route) and predict
-    X = _build_feature_vector(feast_features, None)
-    model = get_model()
+        # Build feature vector (no request body in this route) and predict
+        X = _build_feature_vector(feast_features, None)
+        model = get_model()
         pred = int(model.predict(X)[0])
         prob = float(model.predict_proba(X)[0][1])
 

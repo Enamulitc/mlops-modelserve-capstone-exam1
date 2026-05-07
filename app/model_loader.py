@@ -52,8 +52,8 @@ def load_model():
         _model_version = latest.version
         model_uri = f"models:/{MODEL_NAME}/Production"
         logger.info(f"Loading model '{MODEL_NAME}' v{_model_version} from {model_uri}")
-    # Use mlflow.sklearn.load_model to load the sklearn pipeline from MLflow.
-    _model = mlflow.sklearn.load_model(model_uri)
+        # Use mlflow.sklearn.load_model to load the sklearn pipeline from MLflow.
+        _model = mlflow.sklearn.load_model(model_uri)
         logger.info("Model loaded successfully.")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")

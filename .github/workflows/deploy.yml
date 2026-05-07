@@ -124,3 +124,12 @@ jobs:
             sleep 10
           done
           echo "Health check failed" && exit 1
+
+      - name: Optional smoke-test against deployed URL
+        if: ${{ secrets.DEPLOY_URL != '' }}
+        env:
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install requests
+          python3 scripts/smoke_test.py --url "${DEPLOY_URL}"

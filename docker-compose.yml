@@ -126,6 +126,21 @@ services:
     ports:
       - "9090:9090"
 
+  # ── Alertmanager (routes alerts to Slack/PagerDuty) ───────────────────────
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    environment:
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - PAGERDUTY_ROUTING_KEY=${PAGERDUTY_ROUTING_KEY}
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    depends_on:
+      - prometheus
+
   # ── Grafana ────────────────────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:10.3.3
