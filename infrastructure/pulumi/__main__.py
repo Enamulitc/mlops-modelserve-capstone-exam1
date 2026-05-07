@@ -29,6 +29,11 @@ import pulumi
 import pulumi_aws as aws
 import json
 
+# Pulumi program: provisions a minimal AWS topology suitable for a single-EC2
+# deployment of the model serving stack. This is an alternative to the Terraform
+# modules (Option A). Pulumi lets you express infra in Python with programmatic
+# control flow and dynamic values.
+
 # ─────────────────────────────────────────────
 # Config
 # ─────────────────────────────────────────────
@@ -41,6 +46,7 @@ project_tag     = {"Project": "modelserve"}
 # ─────────────────────────────────────────────
 # VPC & Networking
 # ─────────────────────────────────────────────
+# Create a small VPC with a public subnet so the EC2 instance can have a public IP
 vpc = aws.ec2.Vpc(
     "modelserve-vpc",
     cidr_block="10.0.0.0/16",
@@ -80,6 +86,8 @@ aws.ec2.RouteTableAssociation(
 # ─────────────────────────────────────────────
 # Security Group
 # ─────────────────────────────────────────────
+# Security group opens required ports for the demo: in production narrow SSH
+# and other access to trusted IPs only.
 sg = aws.ec2.SecurityGroup(
     "modelserve-sg",
     vpc_id=vpc.id,
@@ -105,6 +113,8 @@ sg = aws.ec2.SecurityGroup(
 # ─────────────────────────────────────────────
 # S3 Bucket (MLflow artifacts + Feast offline)
 # ─────────────────────────────────────────────
+# Store model artifacts and offline feature data in S3 so multiple components
+# (CI/CD, EC2) can access them. Versioning helps with recovery/rollback.
 s3_bucket = aws.s3.BucketV2(
     "modelserve-artifacts",
     tags={**project_tag, "Name": "modelserve-artifacts"},
@@ -119,6 +129,7 @@ aws.s3.BucketVersioningV2(
 # ─────────────────────────────────────────────
 # ECR Repository
 # ─────────────────────────────────────────────
+# ECR stores Docker images built by CI and pulled by the EC2 instance.
 ecr_repo = aws.ecr.Repository(
     "modelserve-api",
     name="modelserve/proddetection",
@@ -129,6 +140,8 @@ ecr_repo = aws.ecr.Repository(
 # ─────────────────────────────────────────────
 # IAM Role for EC2 (S3 + ECR access)
 # ─────────────────────────────────────────────
+# Instance-role grants the EC2 VM permissions to read model artifacts from S3
+# and pull images from ECR without embedding long-lived credentials on the VM.
 ec2_role = aws.iam.Role(
     "modelserve-ec2-role",
     assume_role_policy=json.dumps({
@@ -162,6 +175,9 @@ instance_profile = aws.iam.InstanceProfile(
 # ─────────────────────────────────────────────
 # EC2 User-Data bootstrap script
 # ─────────────────────────────────────────────
+# The EC2 user-data bootstraps the machine: installs docker, clones the repo and
+# starts the docker-compose stack. In production consider using an AMI with
+# pre-baked images or a more robust deployment pipeline.
 user_data = s3_bucket.bucket.apply(lambda bucket: f"""#!/bin/bash
 set -e
 apt-get update -y
@@ -219,7 +235,7 @@ instance = aws.ec2.Instance(
     tags={**project_tag, "Name": "modelserve-instance"},
 )
 
-# Elastic IP
+# Elastic IP (make the instance reachable from the internet)
 eip = aws.ec2.Eip(
     "modelserve-eip",
     instance=instance.id,

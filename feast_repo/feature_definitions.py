@@ -1,5 +1,11 @@
 # ─────────────────────────────────────────────
 # Feast feature definitions — Credit Card Fraud Detection
+#
+# This file tells Feast how to interpret the offline feature artifact produced
+# by `training/train.py` (features.parquet) and how to expose the features via
+# an online store (Redis) for low-latency retrieval during inference.
+# In production you would typically replace the FileSource with an S3Source
+# pointing to your S3 bucket where materialized features are stored.
 # ─────────────────────────────────────────────
 from datetime import timedelta
 
@@ -13,13 +19,15 @@ entity = Entity(
 )
 
 # Offline source — Parquet file produced by training/train.py
-# In production swap for S3Source pointing to your S3 bucket
+# FileSource is convenient for local development. For cloud deployments swap
+# to S3Source (or a data lake) so Feast can materialize from a shared storage.
 proddetection_source = FileSource(
     path="../training/features.parquet",   # relative to feast_repo/
     timestamp_field="event_timestamp",
 )
 
 # Feature view — all numerical features used by the model
+# TTL controls how long the online store should consider feature values fresh.
 proddetection_fv = FeatureView(
     name="proddetection_features",
     entities=[entity],
