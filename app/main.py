@@ -45,6 +45,8 @@ app = FastAPI(
 # ── Startup ──────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
+    # Attempt to load the model at startup. In CI/test environments this may fail
+    # and is intentionally caught so unit tests can import the module without MLflow.
     logger.info("Loading model from MLflow Registry...")
     try:
         load_model()
@@ -78,6 +80,8 @@ class PredictExplainResponse(PredictResponse):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _build_feature_vector(feast_features: Dict, raw_features: Optional[Dict]) -> pd.DataFrame:
+    # Construct a feature vector (DataFrame) using Feast-provided features or
+    # falling back to raw features supplied by the request body.
     if feast_features:
         values = {f: feast_features.get(f, 0.0) for f in FEATURE_NAMES}
     elif raw_features:
@@ -97,8 +101,9 @@ def health():
 def predict(request: PredictRequest):
     start = time.time()
     try:
-        t0 = time.time()
-        feast_features, cache_hit = get_online_features(request.cc_num)
+    # 1) Lookup features from Feast (online store)
+    t0 = time.time()
+    feast_features, cache_hit = get_online_features(request.cc_num)
         try:
             feast_lookup_duration_seconds.observe(time.time() - t0)
         except Exception:
@@ -117,8 +122,9 @@ def predict(request: PredictRequest):
             if request.features:
                 feast_features = fallback_features(request.features)
 
-        X = _build_feature_vector(feast_features, request.features)
-        model = get_model()
+    # 2) Build feature vector and run the cached model
+    X = _build_feature_vector(feast_features, request.features)
+    model = get_model()
         pred = int(model.predict(X)[0])
         prob = float(model.predict_proba(X)[0][1])
 
@@ -171,8 +177,9 @@ def predict_explain(cc_num: int, explain: bool = Query(default=False)):
             except Exception:
                 pass
 
-        X = _build_feature_vector(feast_features, None)
-        model = get_model()
+    # Build feature vector (no request body in this route) and predict
+    X = _build_feature_vector(feast_features, None)
+    model = get_model()
         pred = int(model.predict(X)[0])
         prob = float(model.predict_proba(X)[0][1])
 

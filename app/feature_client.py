@@ -32,6 +32,8 @@ _store = None
 def get_store():
     global _store
     if _store is None:
+        # Lazy-load Feast to avoid making Feast a hard dependency for unit tests
+        # and to speed up container startup when feature materialization is done separately.
         logger.info(f"Initialising Feast FeatureStore at {FEAST_REPO_PATH}")
         try:
             from feast import FeatureStore
@@ -64,6 +66,9 @@ def get_online_features(cc_num: int) -> Tuple[Dict[str, Any], bool]:
         return values, cache_hit
 
     except Exception as e:
+        # If feature lookup fails (Feast not available, Redis down, etc.) we return
+        # an empty feature dict and signal a cache miss. The API layer will fall back
+        # to request-provided features if present.
         logger.warning(f"Feast lookup failed for cc_num={cc_num}: {e}")
         return {}, False
 

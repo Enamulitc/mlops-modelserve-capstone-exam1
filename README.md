@@ -2,9 +2,21 @@
 
 > A production-grade ML serving platform built for the MLOps with Cloud Season 2 Capstone Exam.
 > It wraps a trained sklearn-compatible model with an MLflow registry, Feast feature store,
-> FastAPI inference API, Prometheus + Grafana observability, Pulumi IaC, and a GitHub Actions CI/CD pipeline.
+> FastAPI inference API, Prometheus + Grafana observability, Terraform IaC (see ADR), and a GitHub Actions CI/CD pipeline.
 
 📖 Full Engineering Documentation → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+## Quickstart (Local)
+
+```bash
+git clone https://github.com/Enamulitc/mlops-modelserve-capstone-exam1.git
+cd mlops-modelserve-capstone-exam1
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+docker compose up -d --build
+```
+
+Visit http://localhost:5000 for MLflow, http://localhost:8000/health for API health, and http://localhost:3000 for Grafana.
 
 ---
 

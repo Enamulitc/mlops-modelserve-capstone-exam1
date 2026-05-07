@@ -108,6 +108,7 @@ def train_model(X_train, y_train, X_test, y_test, feature_names):
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(EXPERIMENT_NAME)
 
+    # Start an MLflow run. This logs params/metrics/artifacts to the configured tracking server.
     with mlflow.start_run(run_name=f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}") as run:
         params = {
             "model_type": "RandomForestClassifier",
@@ -120,6 +121,7 @@ def train_model(X_train, y_train, X_test, y_test, feature_names):
         mlflow.log_param("test_rows", len(X_test))
         mlflow.log_param("fraud_rate_train", round(float(y_train.mean()), 4))
 
+        # Build a simple sklearn pipeline: scaler + RandomForest
         pipeline = Pipeline([
             ("scaler", StandardScaler()),
             ("clf", RandomForestClassifier(
@@ -142,7 +144,9 @@ def train_model(X_train, y_train, X_test, y_test, feature_names):
         for k, v in metrics.items():
             logger.info(f"  {k}: {v:.4f}")
 
-        mlflow.sklearn.log_model(pipeline, "model", registered_model_name=MODEL_NAME)
+    # Log and register the sklearn pipeline. MLflow will upload the artifact to the
+    # configured artifact store (S3 in production, or local volume in dev).
+    mlflow.sklearn.log_model(pipeline, "model", registered_model_name=MODEL_NAME)
         logger.info(f"Run ID: {run.info.run_id}")
         return run.info.run_id
 
