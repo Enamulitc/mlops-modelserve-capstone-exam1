@@ -128,7 +128,9 @@ jobs:
           echo "Health check failed" && exit 1
 
       - name: Optional smoke-test against deployed URL
-        if: ${{ secrets.DEPLOY_URL != '' }}
+        # Use env.DEPLOY_URL in the job-level 'if' expression to avoid
+        # referencing `secrets` directly inside an 'if' (which workflow validator rejects).
+        if: ${{ env.DEPLOY_URL != '' }}
         env:
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
         run: |
