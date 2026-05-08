@@ -48,3 +48,11 @@ module "ec2" {
   iam_instance_profile = module.iam.instance_profile_name
   tags            = var.tags
 }
+
+# Notes:
+# - This Terraform configuration is intentionally modular. Each `module` maps to
+#   a reusable piece of infra (VPC, S3, ECR, IAM, security groups, EC2). This makes
+#   it easier to reason about changes and to reuse modules across projects.
+# - provider "aws": selects the AWS region where resources will be created.
+# - The EC2 module wires the VPC, security group, and IAM instance profile
+#   together so the EC2 instance can access S3 and ECR (for artifacts and images).

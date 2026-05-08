@@ -29,75 +29,111 @@ A baseline AUC of 0.85+ is sufficient.
 """
 
 import os, json, logging
+# os: interact with the operating system (paths, env vars)
+# json: read/write JSON for sample request output
+# logging: structured runtime logging for status and debug messages
 import pandas as pd
+# pandas: primary data manipulation library (CSV read, DataFrame ops)
 import numpy as np
+# numpy: numerical helpers and array operations used by pandas/sklearn
 from datetime import datetime, timezone
+# datetime: timestamp formatting for MLflow run names and event timestamps
 
 import mlflow
+# mlflow: tracking experiments, logging params/metrics/artifacts
 import mlflow.sklearn
+# mlflow.sklearn: helpers to log sklearn models as MLflow artifacts
 from mlflow.tracking import MlflowClient
+# MlflowClient: programmatic access to model registry (promote model stages)
 
 from sklearn.model_selection import train_test_split
+# train_test_split: split dataset into train/test sets reproducibly
 from sklearn.ensemble import RandomForestClassifier
+# RandomForestClassifier: chosen model (robust, works out-of-the-box for tabular data)
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+# LabelEncoder: convert categorical/string columns to integer labels
+# StandardScaler: scale numeric features to mean=0, std=1 for stable training
 from sklearn.pipeline import Pipeline
+# Pipeline: chain preprocessing (scaler) + estimator into a single object
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, roc_auc_score,
 )
+# sklearn.metrics: common evaluation metrics (accuracy, precision, recall, F1, ROC AUC)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+# MLFLOW_TRACKING_URI: where the MLflow tracking server is reachable (env overrideable)
 EXPERIMENT_NAME     = os.getenv("MLFLOW_EXPERIMENT", "proddetection-fraud")
+# EXPERIMENT_NAME: MLflow experiment to log runs under (grouping label)
 MODEL_NAME          = os.getenv("MLFLOW_MODEL_NAME", "proddetection-model")
+# MODEL_NAME: registered model name in MLflow Model Registry
 
 TRAINING_DIR    = os.path.dirname(os.path.abspath(__file__))
+# TRAINING_DIR: directory of this script (used to build relative file paths)
 DATA_PATH       = os.path.join(TRAINING_DIR, "fraudTrain.csv")
+# DATA_PATH: expected location of the raw CSV dataset
 FEATURES_PATH   = os.path.join(TRAINING_DIR, "features.parquet")
+# FEATURES_PATH: output parquet used for Feast ingestion (features + entity + timestamp)
 SAMPLE_REQ_PATH = os.path.join(TRAINING_DIR, "sample_request.json")
+# SAMPLE_REQ_PATH: example request saved for quick testing of the API
 
 ENTITY_COL  = "cc_num"
+# ENTITY_COL: primary entity key (credit card number) used for Feast joins
 TARGET_COL  = "is_fraud"
+# TARGET_COL: binary target column name in the dataset
 FEATURE_COLS = [
     "amt", "city_pop", "lat", "long", "merch_lat", "merch_long",
     "hour", "day_of_week", "month", "age",
     "category_encoded", "gender_encoded", "state_encoded",
     "job_encoded", "trans_count",
 ]
+# FEATURE_COLS: columns we plan to use as input features for the model
 
 
 def load_and_engineer(path):
+    # Read CSV into a pandas DataFrame (pandas provides flexible parsing)
     logger.info(f"Loading data from {path}")
     df = pd.read_csv(path)
     logger.info(f"Loaded {len(df):,} rows")
 
+    # Parse transaction timestamp into datetime and derive temporal features
     df["trans_date_trans_time"] = pd.to_datetime(df["trans_date_trans_time"])
+    # hour, day_of_week, month are useful time-based signals for fraud
     df["hour"]        = df["trans_date_trans_time"].dt.hour
     df["day_of_week"] = df["trans_date_trans_time"].dt.dayofweek
     df["month"]       = df["trans_date_trans_time"].dt.month
 
+    # Convert date-of-birth to datetime and compute approximate age in years
     df["dob"] = pd.to_datetime(df["dob"], errors="coerce")
     df["age"] = (pd.Timestamp.now() - df["dob"]).dt.days // 365
 
+    # Encode categorical columns to integer labels (simple approach for tree models)
     le = LabelEncoder()
     df["category_encoded"] = le.fit_transform(df["category"].astype(str))
     df["gender_encoded"]   = le.fit_transform(df["gender"].astype(str))
     df["state_encoded"]    = le.fit_transform(df["state"].astype(str))
     df["job_encoded"]      = le.fit_transform(df["job"].astype(str))
 
+    # Sort by time to ensure trans_count (cumulative transaction index) is chronological
     df = df.sort_values("trans_date_trans_time")
+    # trans_count: number of prior transactions per entity — a simple behavioral feature
     df["trans_count"] = df.groupby(ENTITY_COL).cumcount()
 
+    # Only keep features that actually exist in the DataFrame (defensive)
     available = [c for c in FEATURE_COLS if c in df.columns]
     logger.info(f"Using features: {available}")
 
+    # X: feature matrix (float), y: binary target (int)
     X = df[available].fillna(0).astype(float)
     y = df[TARGET_COL].astype(int)
 
+    # Prepare a separate parquet file (features + entity + timestamp) for Feast ingestion
     feast_df = X.copy()
     feast_df[ENTITY_COL]        = df[ENTITY_COL].values
     feast_df["event_timestamp"] = df["trans_date_trans_time"].values
+    # Persist to parquet — compact, fast format that Feast materializers can read
     feast_df.to_parquet(FEATURES_PATH, index=False)
     logger.info(f"Saved features.parquet → {FEATURES_PATH}  ({len(feast_df):,} rows)")
 
@@ -109,6 +145,7 @@ def train_model(X_train, y_train, X_test, y_test, feature_names):
     mlflow.set_experiment(EXPERIMENT_NAME)
 
     # Start an MLflow run. This logs params/metrics/artifacts to the configured tracking server.
+    # Start an MLflow run context — grouped logging of params/metrics/artifacts
     with mlflow.start_run(run_name=f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}") as run:
         params = {
             "model_type": "RandomForestClassifier",
@@ -129,9 +166,12 @@ def train_model(X_train, y_train, X_test, y_test, feature_names):
                 class_weight="balanced", random_state=42, n_jobs=-1,
             )),
         ])
+        # Fit the pipeline: scaler followed by the RandomForest estimator
         pipeline.fit(X_train, y_train)
 
+        # Predict labels and probabilities on the test set for evaluation
         y_pred = pipeline.predict(X_test)
+        # y_prob is the positive-class probability used by ROC AUC
         y_prob = pipeline.predict_proba(X_test)[:, 1]
         metrics = {
             "accuracy":  accuracy_score(y_test, y_pred),
@@ -140,15 +180,18 @@ def train_model(X_train, y_train, X_test, y_test, feature_names):
             "f1":        f1_score(y_test, y_pred, zero_division=0),
             "roc_auc":   roc_auc_score(y_test, y_prob),
         }
+        # Log computed metrics to MLflow so they are visible in the UI
         mlflow.log_metrics(metrics)
         for k, v in metrics.items():
             logger.info(f"  {k}: {v:.4f}")
 
-    # Log and register the sklearn pipeline. MLflow will upload the artifact to the
-    # configured artifact store (S3 in production, or local volume in dev).
+    # After the run context, persist the sklearn pipeline as an MLflow model artifact
+    # and register it in the Model Registry under MODEL_NAME. The artifact transport
+    # (where the model files are stored) is configured via MLflow settings (S3, local, ...).
     mlflow.sklearn.log_model(pipeline, "model", registered_model_name=MODEL_NAME)
-        logger.info(f"Run ID: {run.info.run_id}")
-        return run.info.run_id
+    # Log the run id so we can trace this registration from the logs
+    logger.info(f"Run ID: {run.info.run_id}")
+    return run.info.run_id
 
 
 def promote_to_production():

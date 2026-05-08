@@ -80,6 +80,29 @@ Visit http://localhost:5000 for MLflow, http://localhost:8000/health for API hea
 - Write unit tests in `tests/`.
 - Run tests using `pytest`.
 
+### Testing, CI, and End-to-end checks
+
+- Unit tests: put unit tests under `app/tests/`. The repository includes pytest and pytest-cov in `requirements.txt`.
+- CI: GitHub Actions workflows run the unit test suite (`pytest app/tests/ -v --cov=app`). Make sure the CI job passes on push/PR — this is part of the exam rubric.
+- Test isolation: avoid contacting external services (MLflow server, Feast registry) from unit tests. Mock MLflow and Feast client calls so tests are fast and deterministic.
+- Coverage bonus: the rubric awards a small bonus for test coverage above 80% (meaningful tests, not just trivial asserts).
+
+- End-to-end (E2E) API checks after deployment: for the demo and for your deployed system it's recommended to include a simple post-deploy E2E script that:
+   1. Calls each public inference endpoint (for example `/predict` and `/predict/{cc_num}?explain=true`).
+   2. Verifies the response status code is 200 and that required JSON fields are present (prediction, probability, model_version, timestamp, cc_num, etc.).
+   3. Prints a brief report summarizing the checks (endpoint, status, pass/fail, key fields). This script can be invoked manually after deployment and included in CI as an optional smoke-test step.
+
+      Example scripts:
+      - `scripts/smoke_test.py` — runs basic E2E checks against the API and prints a pass/fail report.
+      - `scripts/trigger_synthetic_alert.py` — posts a synthetic alert to Alertmanager (useful to demo alert routing to Slack/PagerDuty).
+
+- README policy for new APIs: when you add a new public API endpoint, update the `README.md` (or docs) to list:
+   - the endpoint path and HTTP method,
+   - required/requested JSON schema or query params,
+   - expected response fields and types,
+   - whether the endpoint is covered by unit/E2E tests and the test file path.
+
+
 ### 6. Monitoring Setup
 - Configure Prometheus in `monitoring/prometheus/prometheus.yml`.
 - Configure Grafana dashboards in `monitoring/grafana/`.

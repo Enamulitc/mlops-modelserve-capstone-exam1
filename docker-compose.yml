@@ -1,31 +1,19 @@
 version: "3.9"
 
-# ─────────────────────────────────────────────────────────────────────────────
 # docker-compose.yml — Local development stack
-# ─────────────────────────────────────────────────────────────────────────────
-# Services:
-#   postgres   — MLflow backend store
-#   mlflow     — Experiment tracking + model registry
-#   redis      — Feast online store
-#   api        — FastAPI inference service
-#   prometheus — Metrics scraping
-#   grafana    — Dashboards & alerts
-#
-# Usage:
-#   docker compose up           # start everything
-#   docker compose up --build   # rebuild images first
-#   docker compose down -v      # stop and remove volumes
-# ─────────────────────────────────────────────────────────────────────────────
+# This compose file defines a compact local environment used for development
+# and demoing the model serving stack. Each service has a small comment explaining
+# its role. Replace environment variables with your own values when running.
 
 services:
 
-  # ── PostgreSQL — MLflow backend store ──────────────────────────────────────
+  # PostgreSQL: MLflow backend store (stores experiment metadata)
   postgres:
     image: postgres:15-alpine
     container_name: postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-mlflow}
+      POSTGRES_USER: ${POSTGRES_USER:-mlflow}   # username for MLflow DB
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow}
       POSTGRES_DB: ${POSTGRES_DB:-mlflow}
     volumes:
@@ -38,7 +26,8 @@ services:
     ports:
       - "5432:5432"
 
-  # ── MLflow tracking server ─────────────────────────────────────────────────
+  # MLflow server: tracks runs and hosts the Model Registry
+  # Artifacts (model files) are stored according to MLFLOW_DEFAULT_ARTIFACT_ROOT
   mlflow:
     build:
       context: ./docker/mlflow
@@ -52,9 +41,8 @@ services:
       MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow}@postgres:5432/${POSTGRES_DB:-mlflow}
       MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_S3_BUCKET:-s3://modelserve-artifacts-8e460886/mlflow-artifacts}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-southeast-1}
-    volumes: []
     ports:
-      - "5000:5000"
+      - "5000:5000"   # MLflow UI
     command: >
       mlflow server
         --backend-store-uri postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow}@postgres:5432/${POSTGRES_DB:-mlflow}
@@ -69,7 +57,7 @@ services:
       timeout: 10s
       retries: 10
 
-  # ── Redis — Feast online store ────────────────────────────────────────────
+  # Redis: used by Feast for low-latency online feature lookups
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -82,7 +70,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── FastAPI inference service ─────────────────────────────────────────────
+  # FastAPI inference service: exposes /predict, /health, /metrics
   api:
     image: ${API_IMAGE:-mlops-modelserve-capstone-exam1-api:latest}
     build:
@@ -97,20 +85,22 @@ services:
       redis:
         condition: service_healthy
     environment:
-      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_TRACKING_URI: http://mlflow:5000   # where model_loader looks for the model
       MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME:-proddetection-model}
-      FEAST_REPO_PATH: /app/feast_repo
+      FEAST_REPO_PATH: /app/feast_repo           # where the container can find Feast repo
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # Use python urllib inside the container (curl isn't installed in the
+      # slim runtime image). This mirrors the mlflow healthcheck approach.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 5
 
-  # ── Prometheus ─────────────────────────────────────────────────────────────
+  # Prometheus: scrapes metrics exposed by the API and other components
   prometheus:
     image: prom/prometheus:v2.50.1
     container_name: prometheus
@@ -126,7 +116,22 @@ services:
     ports:
       - "9090:9090"
 
-  # ── Grafana ────────────────────────────────────────────────────────────────
+  # Alertmanager: routes alerts to configured receivers (Slack/PagerDuty/mock)
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    environment:
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - PAGERDUTY_ROUTING_KEY=${PAGERDUTY_ROUTING_KEY}
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    depends_on:
+      - prometheus
+
+  # Grafana: visualise metrics and pre-provisioned dashboards
   grafana:
     image: grafana/grafana:10.3.3
     container_name: grafana
