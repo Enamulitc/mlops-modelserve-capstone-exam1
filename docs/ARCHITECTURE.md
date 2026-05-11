@@ -27,65 +27,104 @@ while keeping the serving infrastructure reliable, observable, and auditable.
 ### 2.1 Local Development Topology
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Developer Machine / Poridhi VM                 │
-│                                                                     │
-│  ┌─────────┐    ┌─────────────────────────────────────────────────┐ │
-│  │ Client  │───▶│            Docker Compose Network               │ │
-│  │ (curl / │    │                                                 │ │
-│  │  tests) │    │  ┌──────────┐   model load   ┌───────────────┐ │ │
-│  └─────────┘    │  │ FastAPI  │◀──────────────▶│    MLflow     │ │ │
-│                 │  │ :8000    │                 │  (tracking +  │ │ │
-│  POST /predict  │  │          │   Feast SDK     │   registry)   │ │ │
-│  ─────────────▶ │  │          │◀──────────────▶│    :5000      │ │ │
-│                 │  └──────────┘   ┌──────────┐ └───────┬───────┘ │ │
-│                 │       │         │  Redis   │         │         │ │
-│                 │       │ /metrics│  :6379   │         │         │ │
-│                 │       ▼         └──────────┘ ┌───────▼───────┐ │ │
-│                 │  ┌──────────┐                │  PostgreSQL   │ │ │
-│                 │  │Prometheus│                │  (MLflow DB)  │ │ │
-│                 │  │  :9090   │                │    :5432      │ │ │
-│                 │  └────┬─────┘                └───────────────┘ │ │
-│                 │       │                                         │ │
-│                 │  ┌────▼─────┐                                  │ │
-│                 │  │ Grafana  │                                  │ │
-│                 │  │  :3000   │                                  │ │
-│                 │  └──────────┘                                  │ │
-│                 └─────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                       Developer Machine / Poridhi VM                     │
+│                                                                          │
+│  ┌─────────┐    ┌────────────────────────────────────────────────────┐   │
+│  │ Client  │───▶│              Docker Compose Network                │   │
+│  │ (curl / │    │                                                    │   │
+│  │  tests) │    │  ┌──────────┐  model load  ┌──────────────────┐   │   │
+│  └─────────┘    │  │ FastAPI  │◀────────────▶│     MLflow       │   │   │
+│                 │  │ :8000    │              │  (tracking +     │   │   │
+│  POST /predict  │  │          │              │   registry)      │   │   │
+│  ─────────────▶ │  │          │              │   :5000          │   │   │
+│                 │  │          │  Feast SDK   └────────┬─────────┘   │   │
+│                 │  │          │◀──────────┐           │             │   │
+│                 │  └──────────┘           │  ┌────────▼─────────┐   │   │
+│                 │       │                 │  │   PostgreSQL     │   │   │
+│                 │       │ /metrics        │  │  (MLflow DB)     │   │   │
+│                 │       ▼                 │  │   :5432          │   │   │
+│                 │  ┌──────────┐           │  └──────────────────┘   │   │
+│                 │  │Prometheus│  ┌────────┴───────┐                 │   │
+│                 │  │  :9090   │  │     Feast      │                 │   │
+│                 │  └────┬─────┘  │  (feature      │                 │   │
+│                 │       │        │   store SDK)   │                 │   │
+│                 │  ┌────▼─────┐  └────────┬───────┘                 │   │
+│                 │  │ Grafana  │           │  get_online_features     │   │
+│                 │  │  :3000   │  ┌────────▼───────┐                 │   │
+│                 │  └──────────┘  │     Redis      │                 │   │
+│                 │                │  (online store)│                 │   │
+│                 │                │   :6379        │                 │   │
+│                 │                └────────────────┘                 │   │
+│                 └────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.2 Production Topology (Option A — Single EC2 Node)
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  GitHub Actions CI/CD                                                │
-│  push to main ──▶ test ──▶ build+push ECR ──▶ SSH deploy to EC2     │
-└──────────────────────────────┬───────────────────────────────────────┘
-                               │ docker compose pull + up
-                               ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│  AWS (ap-southeast-1)                                                │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │  VPC 10.0.0.0/16  ──  Public Subnet 10.0.1.0/24               │ │
-│  │                                                                 │ │
-│  │  ┌──────────────────────────────────────────────────────────┐  │ │
-│  │  │  EC2 t3.small  (Elastic IP)                              │  │ │
-│  │  │                                                          │  │ │
-│  │  │  FastAPI :8000 ── MLflow :5000 ── Postgres :5432        │  │ │
-│  │  │  Redis   :6379 ── Prometheus :9090 ── Grafana :3000     │  │ │
-│  │  │                         │                               │  │ │
-│  │  │                    S3 (artifacts)                        │  │ │
-│  │  └──────────────────────────────────────────────────────────┘  │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                                                      │
-│  S3 bucket: mlflow artifacts + Feast offline parquet                 │
-│  ECR repo:  modelserve/proddetection (Docker images)                 │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  GitHub (github.com/Enamulitc/mlops-modelserve-capstone-exam1)           │
+│                                                                          │
+│  git push to main                                                        │
+│       │                                                                  │
+│       ▼                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────┐ │
+│  │  GitHub Actions CI/CD  (.github/workflows/deploy.yml)              │ │
+│  │                                                                     │ │
+│  │  [1] test job   ──▶  [2] build-and-push job  ──▶  [3] deploy job  │ │
+│  │  pytest               docker build                SSH to EC2       │ │
+│  │                       docker push ──────────────▶ docker compose  │ │
+│  │                              │       ECR pull      up -d api      │ │
+│  └──────────────────────────────┼────────────────────────────────────┘ │
+└─────────────────────────────────┼────────────────────────────────────────┘
+                                  │
+              ┌───────────────────┴─────────────────┐
+              │                                     │
+              ▼                                     ▼
+┌─────────────────────────┐          ┌──────────────────────────────────────┐
+│  AWS ECR                │          │  AWS (ap-southeast-1)                │
+│  modelserve/proddetect  │          │                                      │
+│  (Docker image registry)│          │  ┌────────────────────────────────┐  │
+└─────────────────────────┘          │  │  VPC 10.0.0.0/16               │  │
+                                     │  │  Public Subnet 10.0.1.0/24     │  │
+              ┌──────────────────────┘  │                                │  │
+              │  image pull             │  ┌──────────────────────────┐  │  │
+              ▼                         │  │  EC2 t3.small            │  │  │
+┌─────────────────────────┐             │  │  (Elastic IP)            │  │  │
+│  AWS S3                 │◀────────────┤  │                          │  │  │
+│  mlflow-artifacts-bucket│  artifacts  │  │  ┌─────────┐ model load │  │  │
+│  + Feast offline parquet│             │  │  │ FastAPI │◀──────────▶│  │  │
+└─────────────────────────┘             │  │  │ :8000   │   ┌──────┐ │  │  │
+                                        │  │  │         │   │MLflow│ │  │  │
+                                        │  │  │         │   │:5000 │ │  │  │
+                                        │  │  │  Feast  │   └──┬───┘ │  │  │
+                                        │  │  │  SDK    │      │     │  │  │
+                                        │  │  │    ▼    │  ┌───▼───┐ │  │  │
+                                        │  │  │  Redis  │  │Postg- │ │  │  │
+                                        │  │  │  :6379  │  │reSQL  │ │  │  │
+                                        │  │  │(online  │  │:5432  │ │  │  │
+                                        │  │  │ store)  │  └───────┘ │  │  │
+                                        │  │  └────┬────┘            │  │  │
+                                        │  │       │ /metrics        │  │  │
+                                        │  │  ┌────▼────┐            │  │  │
+                                        │  │  │Prometh. │            │  │  │
+                                        │  │  │ :9090   │            │  │  │
+                                        │  │  └────┬────┘            │  │  │
+                                        │  │  ┌────▼────┐            │  │  │
+                                        │  │  │ Grafana │            │  │  │
+                                        │  │  │ :3000   │            │  │  │
+                                        │  │  └─────────┘            │  │  │
+                                        │  └──────────────────────────┘  │  │
+                                        │  └────────────────────────────┘  │
+                                        └──────────────────────────────────┘
 ```
 
-See `docs/diagrams/` for image versions of these diagrams.
+> **Component summary:** FastAPI (`:8000`) · MLflow (`:5000`) · PostgreSQL (`:5432`) ·
+> Feast SDK · Redis online store (`:6379`) · Prometheus (`:9090`) · Grafana (`:3000`) ·
+> S3 (artifacts + offline features) · ECR (Docker images) · GitHub Actions (CI/CD)
+
+See `docs/diagrams/` for rendered image versions of these diagrams.
 
 ---
 
@@ -230,8 +269,8 @@ The dashboard does not yet include infrastructure metrics (CPU, memory, disk).
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Enamulitc/mlops-labs-enam.git
-cd mlops-labs-enam/mlops-exam/mlops-exam1/proddetection/modelserve
+git clone https://github.com/Enamulitc/mlops-modelserve-capstone-exam1.git
+cd mlops-modelserve-capstone-exam1
 
 # 2. Copy and configure environment variables
 cp .env.example .env
@@ -291,7 +330,7 @@ git push origin main
 docker compose down -v
 
 # Destroy AWS resources
-cd infrastructure
+cd infrastructure/pulumi
 pulumi destroy --yes
 ```
 
