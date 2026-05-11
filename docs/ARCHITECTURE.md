@@ -26,6 +26,10 @@ while keeping the serving infrastructure reliable, observable, and auditable.
 
 ### 2.1 Local Development Topology
 
+Rendered image version (for demo):
+
+![Local Development Topology — Numbered Flow](./diagrams/local-topology.svg)
+
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                       Developer Machine / Poridhi VM                     │
@@ -61,6 +65,10 @@ while keeping the serving infrastructure reliable, observable, and auditable.
 ```
 
 ### 2.2 Production Topology (Option A — Single EC2 Node)
+
+Rendered image version (for demo):
+
+![Production Topology — Numbered Flow](./diagrams/production-topology.svg)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
